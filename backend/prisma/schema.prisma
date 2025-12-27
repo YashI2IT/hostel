@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+}
+
+model Property {
+  id          String   @id @default(uuid())
+  name        String
+  address     String?
+  totalFloors Int      @default(1)
+  createdAt   DateTime @default(now())
+  rooms       Room[]
+}
+
+model Room {
+  id          String      @id @default(uuid())
+  roomNumber  String
+  floorNumber Int
+  type        String
+  capacity    Int
+  propertyId  String
+  beds        Bed[]
+  complaints  Complaint[]
+  property    Property    @relation(fields: [propertyId], references: [id])
+
+  @@unique([propertyId, roomNumber])
+}
+
+model Bed {
+  id               String   @id @default(uuid())
+  label            String
+  status           String   @default("AVAILABLE")
+  roomId           String
+  currentStudentId String?  @unique
+  currentStudent   Student? @relation(fields: [currentStudentId], references: [id])
+  room             Room     @relation(fields: [roomId], references: [id])
+}
+
+model Student {
+  id               String      @id @default(uuid())
+  name             String
+  age              Int
+  phoneNumber      String      @unique
+  email            String?
+  emergencyContact String
+  address          String?
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  assignedBed      Bed?
+  bookings         Booking[]
+  complaints       Complaint[]
+}
+
+model Booking {
+  id          String   @id @default(uuid())
+  studentId   String
+  frequency   String
+  startDate   DateTime
+  endDate     DateTime
+  totalAmount Float
+  createdAt   DateTime @default(now())
+  student     Student  @relation(fields: [studentId], references: [id])
+  payment     Payment?
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  bookingId      String   @unique
+  amount         Float
+  date           DateTime @default(now())
+  method         String
+  transactionRef String?
+  booking        Booking  @relation(fields: [bookingId], references: [id])
+}
+
+model Complaint {
+  id          String    @id @default(uuid())
+  category    String
+  description String
+  status      String    @default("OPEN")
+  roomId      String
+  studentId   String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  student     Student?  @relation(fields: [studentId], references: [id])
+  room        Room      @relation(fields: [roomId], references: [id])
+}
