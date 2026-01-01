@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   User, 
   Property, 
@@ -8,6 +8,8 @@ import {
   Room,
   Floor
 } from '@/types/hostel';
+import api from '@/lib/api';
+import { transformComplaint, transformResident, transformFrequencyToBackend, transformPaymentMethodToBackend, transformComplaintStatusToBackend } from '@/lib/data-transform';
 
 interface HostelContextType {
   user: User | null;
@@ -28,235 +30,67 @@ interface HostelContextType {
 
 const HostelContext = createContext<HostelContextType | undefined>(undefined);
 
-// Mock data for demonstration
-const mockProperties: Property[] = [
-  {
-    id: 'prop-1',
-    name: 'Sunrise Hostel',
-    address: '123 University Road, City Center',
-    tenantId: 'tenant-1',
-    floors: [
-      {
-        id: 'floor-1',
-        number: 1,
-        propertyId: 'prop-1',
-        rooms: [
-          {
-            id: 'room-1-1',
-            number: '101',
-            floorId: 'floor-1',
-            beds: [
-              { id: 'bed-1-1-1', number: 1, roomId: 'room-1-1', isOccupied: true, resident: {
-                id: 'res-1',
-                name: 'Rahul Sharma',
-                age: 22,
-                contactNumber: '+91 98765 43210',
-                email: 'rahul@email.com',
-                emergencyContact: '+91 98765 00000',
-                emergencyContactName: 'Mr. Sharma (Father)',
-                bedId: 'bed-1-1-1',
-                roomId: 'room-1-1',
-                floorId: 'floor-1',
-                propertyId: 'prop-1',
-                startDate: '2024-01-15',
-                endDate: '2024-12-31',
-                billingFrequency: 'monthly',
-                monthlyRent: 8000,
-                paymentStatus: 'paid',
-                lastPaymentDate: '2024-12-01'
-              }},
-              { id: 'bed-1-1-2', number: 2, roomId: 'room-1-1', isOccupied: false },
-              { id: 'bed-1-1-3', number: 3, roomId: 'room-1-1', isOccupied: true, resident: {
-                id: 'res-2',
-                name: 'Priya Patel',
-                age: 21,
-                contactNumber: '+91 87654 32109',
-                email: 'priya@email.com',
-                emergencyContact: '+91 87654 00000',
-                emergencyContactName: 'Mrs. Patel (Mother)',
-                bedId: 'bed-1-1-3',
-                roomId: 'room-1-1',
-                floorId: 'floor-1',
-                propertyId: 'prop-1',
-                startDate: '2024-02-01',
-                endDate: '2025-01-31',
-                billingFrequency: 'yearly',
-                monthlyRent: 7500,
-                paymentStatus: 'pending',
-                lastPaymentDate: '2024-11-01'
-              }},
-            ]
-          },
-          {
-            id: 'room-1-2',
-            number: '102',
-            floorId: 'floor-1',
-            beds: [
-              { id: 'bed-1-2-1', number: 1, roomId: 'room-1-2', isOccupied: false },
-              { id: 'bed-1-2-2', number: 2, roomId: 'room-1-2', isOccupied: true, resident: {
-                id: 'res-3',
-                name: 'Amit Kumar',
-                age: 23,
-                contactNumber: '+91 76543 21098',
-                email: 'amit@email.com',
-                emergencyContact: '+91 76543 00000',
-                emergencyContactName: 'Mr. Kumar (Father)',
-                bedId: 'bed-1-2-2',
-                roomId: 'room-1-2',
-                floorId: 'floor-1',
-                propertyId: 'prop-1',
-                startDate: '2024-03-01',
-                endDate: '2024-08-31',
-                billingFrequency: 'monthly',
-                monthlyRent: 8000,
-                paymentStatus: 'overdue',
-                lastPaymentDate: '2024-10-01'
-              }},
-            ]
-          },
-          {
-            id: 'room-1-3',
-            number: '103',
-            floorId: 'floor-1',
-            beds: [
-              { id: 'bed-1-3-1', number: 1, roomId: 'room-1-3', isOccupied: false },
-              { id: 'bed-1-3-2', number: 2, roomId: 'room-1-3', isOccupied: false },
-              { id: 'bed-1-3-3', number: 3, roomId: 'room-1-3', isOccupied: false },
-              { id: 'bed-1-3-4', number: 4, roomId: 'room-1-3', isOccupied: false },
-            ]
-          },
-        ]
-      },
-      {
-        id: 'floor-2',
-        number: 2,
-        propertyId: 'prop-1',
-        rooms: [
-          {
-            id: 'room-2-1',
-            number: '201',
-            floorId: 'floor-2',
-            beds: [
-              { id: 'bed-2-1-1', number: 1, roomId: 'room-2-1', isOccupied: true, resident: {
-                id: 'res-4',
-                name: 'Sneha Reddy',
-                age: 20,
-                contactNumber: '+91 65432 10987',
-                email: 'sneha@email.com',
-                emergencyContact: '+91 65432 00000',
-                emergencyContactName: 'Dr. Reddy (Father)',
-                bedId: 'bed-2-1-1',
-                roomId: 'room-2-1',
-                floorId: 'floor-2',
-                propertyId: 'prop-1',
-                startDate: '2024-06-01',
-                endDate: '2025-05-31',
-                billingFrequency: 'yearly',
-                monthlyRent: 8500,
-                paymentStatus: 'paid',
-                lastPaymentDate: '2024-06-01'
-              }},
-              { id: 'bed-2-1-2', number: 2, roomId: 'room-2-1', isOccupied: false },
-            ]
-          },
-          {
-            id: 'room-2-2',
-            number: '202',
-            floorId: 'floor-2',
-            beds: [
-              { id: 'bed-2-2-1', number: 1, roomId: 'room-2-2', isOccupied: false },
-              { id: 'bed-2-2-2', number: 2, roomId: 'room-2-2', isOccupied: false },
-              { id: 'bed-2-2-3', number: 3, roomId: 'room-2-2', isOccupied: false },
-            ]
-          },
-        ]
-      },
-      {
-        id: 'floor-3',
-        number: 3,
-        propertyId: 'prop-1',
-        rooms: [
-          {
-            id: 'room-3-1',
-            number: '301',
-            floorId: 'floor-3',
-            beds: [
-              { id: 'bed-3-1-1', number: 1, roomId: 'room-3-1', isOccupied: true, resident: {
-                id: 'res-5',
-                name: 'Vikram Singh',
-                age: 24,
-                contactNumber: '+91 54321 09876',
-                email: 'vikram@email.com',
-                emergencyContact: '+91 54321 00000',
-                emergencyContactName: 'Mrs. Singh (Mother)',
-                bedId: 'bed-3-1-1',
-                roomId: 'room-3-1',
-                floorId: 'floor-3',
-                propertyId: 'prop-1',
-                startDate: '2024-04-01',
-                endDate: '2024-09-30',
-                billingFrequency: 'monthly',
-                monthlyRent: 9000,
-                paymentStatus: 'paid',
-                lastPaymentDate: '2024-12-05'
-              }},
-              { id: 'bed-3-1-2', number: 2, roomId: 'room-3-1', isOccupied: false },
-            ]
-          },
-        ]
-      },
-    ]
-  }
-];
-
-const mockComplaints: Complaint[] = [
-  {
-    id: 'complaint-1',
-    roomId: 'room-1-1',
-    roomNumber: '101',
-    category: 'plumbing',
-    description: 'Water leakage in the bathroom sink. Needs immediate attention.',
-    status: 'open',
-    createdAt: '2024-12-18T10:30:00Z'
-  },
-  {
-    id: 'complaint-2',
-    roomId: 'room-2-1',
-    roomNumber: '201',
-    category: 'electrical',
-    description: 'One of the ceiling fans is making noise and needs repair.',
-    status: 'in-progress',
-    createdAt: '2024-12-15T14:20:00Z'
-  }
-];
-
 export function HostelProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [properties, setProperties] = useState<Property[]>(mockProperties);
-  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const isAuthenticated = user !== null;
 
-  const login = async (email: string, password: string, orgId: string): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock successful login
-    if (email && password && orgId) {
-      setUser({
-        id: 'user-1',
-        email,
-        name: 'Admin User',
-        role: 'admin',
-        tenantId: 'tenant-1'
-      });
-      return true;
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [propertiesData, complaintsData] = await Promise.all([
+        api.getProperties(),
+        api.getComplaints(),
+      ]);
+      
+      setProperties(propertiesData);
+      setComplaints(complaintsData.map(transformComplaint));
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
     }
-    return false;
+  };
+
+  // Fetch properties and complaints when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const login = async (email: string, password: string, orgId: string): Promise<boolean> => {
+    try {
+      // Use email as username for now (backend uses username)
+      const response = await api.login(email, password);
+      
+      if (response.user) {
+        setUser({
+          id: response.user.id,
+          email: email, // Use email from input
+          name: response.user.name,
+          role: response.user.role.toLowerCase() as 'admin' | 'manager' | 'staff',
+          tenantId: orgId || response.user.id, // Use orgId or user id as tenantId
+        });
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
   };
 
   const logout = () => {
     setUser(null);
+    setProperties([]);
+    setComplaints([]);
   };
 
   const getAllResidents = (): Resident[] => {
@@ -275,135 +109,137 @@ export function HostelProvider({ children }: { children: ReactNode }) {
     return allResidents;
   };
 
-  const addResident = (resident: Resident) => {
-    setProperties(prev => {
-      return prev.map(property => {
-        if (property.id !== resident.propertyId) return property;
-        return {
-          ...property,
-          floors: property.floors.map(floor => {
-            if (floor.id !== resident.floorId) return floor;
-            return {
-              ...floor,
-              rooms: floor.rooms.map(room => {
-                if (room.id !== resident.roomId) return room;
-                return {
-                  ...room,
-                  beds: room.beds.map(bed => {
-                    if (bed.id !== resident.bedId) return bed;
-                    return { ...bed, isOccupied: true, resident };
-                  })
-                };
-              })
-            };
-          })
-        };
+  // Fetch residents from API
+  const fetchResidents = async (): Promise<Resident[]> => {
+    try {
+      const students = await api.getStudents({ isActive: true });
+      return students.map(transformResident);
+    } catch (error) {
+      console.error('Failed to fetch residents:', error);
+      return [];
+    }
+  };
+
+  const addResident = async (resident: Resident) => {
+    try {
+      // This is typically done through onboarding API
+      // For now, we'll just refresh the data
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to add resident:', error);
+      throw error;
+    }
+  };
+
+  const updateBedStatus = async (bedId: string, isOccupied: boolean, resident?: Resident) => {
+    try {
+      await api.updateBed(bedId, {
+        status: isOccupied ? 'OCCUPIED' : 'AVAILABLE',
+        currentStudentId: isOccupied && resident ? resident.id : undefined,
       });
-    });
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to update bed status:', error);
+      throw error;
+    }
   };
 
-  const updateBedStatus = (bedId: string, isOccupied: boolean, resident?: Resident) => {
-    setProperties(prev => {
-      return prev.map(property => ({
-        ...property,
-        floors: property.floors.map(floor => ({
-          ...floor,
-          rooms: floor.rooms.map(room => ({
-            ...room,
-            beds: room.beds.map(bed => {
-              if (bed.id !== bedId) return bed;
-              return { ...bed, isOccupied, resident };
-            })
-          }))
-        }))
-      }));
-    });
+  const addRoom = async (floorId: string, roomNumber: string, bedCount: number) => {
+    try {
+      // Extract propertyId and floorNumber from floorId (format: "floor-{number}")
+      const floorNumber = parseInt(floorId.replace('floor-', ''));
+      const property = properties.find(p => 
+        p.floors.some(f => f.id === floorId)
+      );
+      
+      if (!property) {
+        throw new Error('Property not found for floor');
+      }
+
+      // Create room
+      const room = await api.createRoom({
+        roomNumber,
+        floorNumber,
+        type: 'STANDARD', // Default type
+        capacity: bedCount,
+        propertyId: property.id,
+      });
+
+      // Create beds
+      for (let i = 0; i < bedCount; i++) {
+        await api.createBed({
+          label: String.fromCharCode(65 + i), // A, B, C, etc.
+          roomId: room.id,
+          status: 'AVAILABLE',
+        });
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to add room:', error);
+      throw error;
+    }
   };
 
-  const addRoom = (floorId: string, roomNumber: string, bedCount: number) => {
-    const newRoomId = `room-${Date.now()}`;
-    const newBeds: Bed[] = Array.from({ length: bedCount }, (_, i) => ({
-      id: `bed-${newRoomId}-${i + 1}`,
-      number: i + 1,
-      roomId: newRoomId,
-      isOccupied: false
-    }));
+  const updateRoomBeds = async (roomId: string, bedCount: number) => {
+    try {
+      // Get current room data
+      const room = await api.getRoom(roomId);
+      const currentBedCount = room.beds?.length || 0;
+      const occupiedBeds = room.beds?.filter((b: any) => b.status === 'OCCUPIED') || [];
+      
+      if (bedCount < occupiedBeds.length) {
+        throw new Error('Cannot reduce beds below occupied count');
+      }
 
-    setProperties(prev => {
-      return prev.map(property => ({
-        ...property,
-        floors: property.floors.map(floor => {
-          if (floor.id !== floorId) return floor;
-          return {
-            ...floor,
-            rooms: [...floor.rooms, {
-              id: newRoomId,
-              number: roomNumber,
-              floorId,
-              beds: newBeds
-            }]
-          };
-        })
-      }));
-    });
+      // Update room capacity
+      await api.updateRoom(roomId, {
+        capacity: bedCount,
+      });
+
+      // Add new beds if needed
+      if (bedCount > currentBedCount) {
+        for (let i = currentBedCount; i < bedCount; i++) {
+          await api.createBed({
+            label: String.fromCharCode(65 + i), // A, B, C, etc.
+            roomId: roomId,
+            status: 'AVAILABLE',
+          });
+        }
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to update room beds:', error);
+      throw error;
+    }
   };
 
-  const updateRoomBeds = (roomId: string, bedCount: number) => {
-    setProperties(prev => {
-      return prev.map(property => ({
-        ...property,
-        floors: property.floors.map(floor => ({
-          ...floor,
-          rooms: floor.rooms.map(room => {
-            if (room.id !== roomId) return room;
-            const currentBeds = room.beds;
-            const occupiedBeds = currentBeds.filter(b => b.isOccupied);
-            
-            if (bedCount < occupiedBeds.length) {
-              // Can't reduce beds below occupied count
-              return room;
-            }
-
-            const newBeds: Bed[] = [];
-            for (let i = 0; i < bedCount; i++) {
-              const existingBed = currentBeds[i];
-              if (existingBed) {
-                newBeds.push(existingBed);
-              } else {
-                newBeds.push({
-                  id: `bed-${roomId}-${Date.now()}-${i}`,
-                  number: i + 1,
-                  roomId,
-                  isOccupied: false
-                });
-              }
-            }
-
-            return { ...room, beds: newBeds };
-          })
-        }))
-      }));
-    });
+  const addComplaint = async (complaint: Omit<Complaint, 'id' | 'createdAt'>) => {
+    try {
+      const newComplaint = await api.createComplaint({
+        category: complaint.category.toUpperCase(),
+        description: complaint.description,
+        roomId: complaint.roomId,
+        studentId: undefined, // Could be added if we track the student making the complaint
+      });
+      setComplaints(prev => [transformComplaint(newComplaint), ...prev]);
+    } catch (error) {
+      console.error('Failed to add complaint:', error);
+      throw error;
+    }
   };
 
-  const addComplaint = (complaint: Omit<Complaint, 'id' | 'createdAt'>) => {
-    const newComplaint: Complaint = {
-      ...complaint,
-      id: `complaint-${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
-    setComplaints(prev => [newComplaint, ...prev]);
-  };
-
-  const updateComplaintStatus = (complaintId: string, status: Complaint['status']) => {
-    setComplaints(prev => prev.map(c => {
-      if (c.id !== complaintId) return c;
-      return {
-        ...c,
-        status,
-        resolvedAt: status === 'resolved' ? new Date().toISOString() : undefined
-      };
-    }));
+  const updateComplaintStatus = async (complaintId: string, status: Complaint['status']) => {
+    try {
+      await api.updateComplaint(complaintId, {
+        status: transformComplaintStatusToBackend(status),
+      });
+      await fetchData(); // Refresh to get updated resolvedAt
+    } catch (error) {
+      console.error('Failed to update complaint status:', error);
+      throw error;
+    }
   };
 
   const getOccupancyStats = () => {
