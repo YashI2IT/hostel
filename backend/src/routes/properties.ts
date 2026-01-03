@@ -14,11 +14,14 @@ router.get("/", async (_req, res) => {
             beds: {
               include: {
                 currentStudent: {
-                  select: {
-                    id: true,
-                    name: true,
-                    phoneNumber: true,
-                    email: true,
+                  include: {
+                    bookings: {
+                      include: {
+                        payment: true,
+                      },
+                      orderBy: { createdAt: "desc" },
+                      take: 1,
+                    },
                   },
                 },
               },
@@ -41,33 +44,52 @@ router.get("/", async (_req, res) => {
           id: room.id,
           number: room.roomNumber,
           floorId: `floor-${room.floorNumber}`,
-          beds: room.beds.map(bed => ({
-            id: bed.id,
-            number: bed.label,
-            roomId: room.id,
-            isOccupied: bed.status === "OCCUPIED",
-            resident: bed.currentStudent ? {
-              id: bed.currentStudent.id,
-              name: bed.currentStudent.name,
-              phoneNumber: bed.currentStudent.phoneNumber,
-              email: bed.currentStudent.email,
-            } : undefined,
-          })),
+          type: room.type,
+          beds: room.beds.map(bed => {
+            const student = bed.currentStudent;
+            const booking = student?.bookings?.[0];
+            const payment = booking?.payment;
+            
+            return {
+              id: bed.id,
+              number: bed.label,
+              roomId: room.id,
+              isOccupied: bed.status === "OCCUPIED",
+              resident: student ? {
+                id: student.id,
+                name: student.name,
+                age: student.age,
+                phoneNumber: student.phoneNumber,
+                email: student.email,
+                emergencyContact: student.emergencyContact,
+                // Booking data
+                startDate: booking?.startDate?.toISOString().split('T')[0] || '',
+                endDate: booking?.endDate?.toISOString().split('T')[0] || '',
+                frequency: booking?.frequency || 'MONTHLY',
+                totalAmount: booking?.totalAmount || 0,
+                // Payment data
+                paymentStatus: payment ? 'paid' : 'pending',
+                lastPaymentDate: payment?.date?.toISOString().split('T')[0],
+              } : undefined,
+            };
+          }),
         });
       });
 
-      const floors = Array.from(floorsMap.entries()).map(([floorNumber, rooms]) => ({
-        id: `floor-${floorNumber}`,
-        number: floorNumber,
-        propertyId: property.id,
-        rooms,
-      }));
+      const floors = Array.from(floorsMap.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([floorNumber, rooms]) => ({
+          id: `floor-${floorNumber}`,
+          number: floorNumber,
+          propertyId: property.id,
+          rooms,
+        }));
 
       return {
         id: property.id,
         name: property.name,
         address: property.address || "",
-        tenantId: property.id, // Using property ID as tenant ID for now
+        tenantId: property.id,
         floors,
       };
     });

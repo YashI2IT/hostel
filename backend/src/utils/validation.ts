@@ -26,7 +26,7 @@ export const propertyUpdateSchema = propertyCreateSchema.partial();
 export const roomCreateSchema = z.object({
   roomNumber: z.string().min(1, "Room number is required"),
   floorNumber: z.number().int().min(0, "Floor number must be non-negative"),
-  type: z.enum(["AC", "NON_AC"]),
+  type: z.enum(["AC", "NON_AC", "STANDARD"]).default("STANDARD"),
   capacity: z.number().int().positive("Capacity must be positive"),
   propertyId: z.string().uuid("Invalid property ID"),
 });
@@ -80,16 +80,16 @@ export const paymentCreateSchema = z.object({
 
 // Complaint schemas
 export const complaintCreateSchema = z.object({
-  category: z.enum(["PLUMBING", "ELECTRICAL", "CLEANING", "OTHER"]),
+  category: z.enum(["PLUMBING", "ELECTRICAL", "CLEANING", "FURNITURE", "OTHER"]),
   description: z.string().min(1, "Description is required"),
   roomId: z.string().uuid("Invalid room ID"),
   studentId: z.string().uuid("Invalid student ID").optional(),
 });
 
 export const complaintUpdateSchema = z.object({
-  category: z.enum(["PLUMBING", "ELECTRICAL", "CLEANING", "OTHER"]).optional(),
+  category: z.enum(["PLUMBING", "ELECTRICAL", "CLEANING", "FURNITURE", "OTHER"]).optional(),
   description: z.string().optional(),
-  status: z.enum(["OPEN", "RESOLVED"]).optional(),
+  status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED"]).optional(),
 });
 
 // Onboarding schema (combines student, booking, and payment)

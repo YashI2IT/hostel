@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, BedDouble, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, BedDouble, Save, X } from 'lucide-react';
 import { useHostel } from '@/context/HostelContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -157,7 +157,7 @@ export default function RoomManagement() {
                             <input
                               type="number"
                               value={editingRoom.bedCount}
-                              onChange={(e) => setEditingRoom({ ...editingRoom, bedCount: parseInt(e.target.value) })}
+                              onChange={(e) => setEditingRoom({ ...editingRoom, bedCount: parseInt(e.target.value) || 1 })}
                               min={occupiedBeds || 1}
                               className="form-input mt-1"
                               onClick={(e) => e.stopPropagation()}
@@ -262,7 +262,7 @@ export default function RoomManagement() {
                 <input
                   type="number"
                   value={newRoomBeds}
-                  onChange={(e) => setNewRoomBeds(parseInt(e.target.value))}
+                  onChange={(e) => setNewRoomBeds(parseInt(e.target.value) || 1)}
                   min={1}
                   max={10}
                   className="form-input"

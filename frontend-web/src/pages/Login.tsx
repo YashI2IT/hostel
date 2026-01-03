@@ -142,14 +142,14 @@ export default function Login() {
               </div>
 
               <div>
-                <label className="form-label">Email Address</label>
+                <label className="form-label">Username</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@yourcompany.com"
+                    placeholder="admin"
                     className="form-input pl-11"
                   />
                 </div>

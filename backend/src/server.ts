@@ -36,6 +36,28 @@ app.use("/api/complaints", complaintRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
+// API info endpoint
+app.get("/api", (_req, res) => {
+  res.json({
+    message: "Hostel Hub API",
+    version: "1.0.0",
+    endpoints: {
+      auth: "/api/auth",
+      properties: "/api/properties",
+      rooms: "/api/rooms",
+      beds: "/api/beds",
+      students: "/api/students",
+      bookings: "/api/bookings",
+      payments: "/api/payments",
+      complaints: "/api/complaints",
+      onboarding: "/api/onboarding",
+      dashboard: "/api/dashboard",
+    },
+    health: "/health",
+    database: "/health/db",
+  });
+});
+
 // Health check
 app.get("/", (_req, res) => res.json({ message: "Hostel Hub API is running" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));

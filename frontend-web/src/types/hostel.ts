@@ -31,6 +31,7 @@ export interface Room {
   id: string;
   number: string;
   floorId: string;
+  type?: 'AC' | 'NON_AC' | 'STANDARD';
   beds: Bed[];
 }
 

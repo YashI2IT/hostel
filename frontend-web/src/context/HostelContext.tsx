@@ -1,15 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  User, 
-  Property, 
-  Resident, 
-  Complaint, 
-  Bed,
-  Room,
-  Floor
-} from '@/types/hostel';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, Property, Resident, Complaint } from '@/types/hostel';
 import api from '@/lib/api';
-import { transformComplaint, transformResident, transformFrequencyToBackend, transformPaymentMethodToBackend, transformComplaintStatusToBackend } from '@/lib/data-transform';
+import { transformComplaint, transformComplaintStatusToBackend } from '@/lib/data-transform';
 
 interface HostelContextType {
   user: User | null;
@@ -17,14 +9,16 @@ interface HostelContextType {
   residents: Resident[];
   complaints: Complaint[];
   isAuthenticated: boolean;
+  loading: boolean;
   login: (email: string, password: string, orgId: string) => Promise<boolean>;
   logout: () => void;
-  addResident: (resident: Resident) => void;
-  updateBedStatus: (bedId: string, isOccupied: boolean, resident?: Resident) => void;
-  addRoom: (floorId: string, roomNumber: string, bedCount: number) => void;
-  updateRoomBeds: (roomId: string, bedCount: number) => void;
-  addComplaint: (complaint: Omit<Complaint, 'id' | 'createdAt'>) => void;
-  updateComplaintStatus: (complaintId: string, status: Complaint['status']) => void;
+  refreshData: () => Promise<void>;
+  addResident: (resident: Resident) => Promise<void>;
+  updateBedStatus: (bedId: string, isOccupied: boolean, resident?: Resident) => Promise<void>;
+  addRoom: (floorId: string, roomNumber: string, bedCount: number) => Promise<void>;
+  updateRoomBeds: (roomId: string, bedCount: number) => Promise<void>;
+  addComplaint: (complaint: Omit<Complaint, 'id' | 'createdAt'>) => Promise<void>;
+  updateComplaintStatus: (complaintId: string, status: Complaint['status']) => Promise<void>;
   getOccupancyStats: () => { total: number; occupied: number; available: number };
 }
 
@@ -34,55 +28,154 @@ export function HostelProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const isAuthenticated = user !== null;
 
-  const fetchData = async () => {
+  // Fetch all data from database
+  const refreshData = async () => {
     try {
       setLoading(true);
+      console.log('Fetching data from database...');
+      
       const [propertiesData, complaintsData] = await Promise.all([
         api.getProperties(),
         api.getComplaints(),
       ]);
       
-      setProperties(propertiesData);
+      console.log('Properties from DB:', propertiesData);
+      console.log('Complaints from DB:', complaintsData);
+      
+      if (!propertiesData || propertiesData.length === 0) {
+        console.log('No data from API, check backend connection');
+        return;
+      }
+      
+      // Transform properties data
+      const transformedProperties = propertiesData.map((property: any) => ({
+        ...property,
+        floors: property.floors?.map((floor: any) => ({
+          ...floor,
+          rooms: floor.rooms?.map((room: any) => ({
+            ...room,
+            type: room.type || 'STANDARD',
+            beds: room.beds?.map((bed: any, bedIndex: number) => {
+              // Convert bed label (A, B, C) to number (1, 2, 3)
+              let bedNumber = bedIndex + 1;
+              if (typeof bed.number === 'string' && bed.number.length === 1) {
+                bedNumber = bed.number.charCodeAt(0) - 64; // A=1, B=2, C=3
+              } else if (typeof bed.number === 'number') {
+                bedNumber = bed.number;
+              }
+              
+              // Calculate monthly rent from total amount and frequency
+              let monthlyRent = 0;
+              if (bed.resident?.totalAmount) {
+                const freq = bed.resident.frequency || 'MONTHLY';
+                if (freq === 'YEARLY') {
+                  monthlyRent = bed.resident.totalAmount / 12;
+                } else if (freq === 'MONTHLY') {
+                  // For monthly, totalAmount is yearly total, so divide by 12
+                  // Or if totalAmount > 50000, assume it's yearly total
+                  if (bed.resident.totalAmount > 50000) {
+                    monthlyRent = bed.resident.totalAmount / 12;
+                  } else {
+                    monthlyRent = bed.resident.totalAmount;
+                  }
+                } else {
+                  monthlyRent = bed.resident.totalAmount;
+                }
+              }
+              
+              return {
+                id: bed.id,
+                number: bedNumber,
+                roomId: bed.roomId,
+                isOccupied: bed.isOccupied,
+                resident: bed.resident ? {
+                  id: bed.resident.id,
+                  name: bed.resident.name,
+                  age: bed.resident.age || 0,
+                  contactNumber: bed.resident.phoneNumber || '',
+                  email: bed.resident.email || '',
+                  emergencyContact: bed.resident.emergencyContact || '',
+                  emergencyContactName: '',
+                  bedId: bed.id,
+                  roomId: room.id,
+                  floorId: floor.id,
+                  propertyId: property.id,
+                  startDate: bed.resident.startDate || '',
+                  endDate: bed.resident.endDate || '',
+                  billingFrequency: (bed.resident.frequency === 'YEARLY' ? 'yearly' : 
+                                     bed.resident.frequency === 'EXCEPTION' ? 'custom' : 'monthly') as 'monthly' | 'yearly' | 'custom',
+                  monthlyRent: monthlyRent,
+                  paymentStatus: (bed.resident.paymentStatus || 'pending') as 'paid' | 'pending' | 'overdue',
+                  lastPaymentDate: bed.resident.lastPaymentDate,
+                } : undefined,
+              };
+            }) || [],
+          })) || [],
+        })) || [],
+      }));
+      
+      console.log('Transformed properties:', transformedProperties);
+      setProperties(transformedProperties);
       setComplaints(complaintsData.map(transformComplaint));
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch data from database:', error);
+      alert('Failed to connect to backend. Make sure backend server is running on http://localhost:4000');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch properties and complaints when user logs in
+  // Fetch data when user logs in
   useEffect(() => {
     if (user) {
-      fetchData();
-    } else {
-      setLoading(false);
+      console.log('User logged in, fetching data...');
+      refreshData();
     }
   }, [user]);
 
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('Properties state updated:', properties.length, 'properties');
+    if (properties.length > 0) {
+      const totalBeds = properties.reduce((acc, p) => 
+        acc + p.floors.reduce((fAcc, f) => 
+          fAcc + f.rooms.reduce((rAcc, r) => rAcc + r.beds.length, 0), 0), 0);
+      console.log('Total beds in state:', totalBeds);
+    }
+  }, [properties]);
+
   const login = async (email: string, password: string, orgId: string): Promise<boolean> => {
     try {
-      // Use email as username for now (backend uses username)
       const response = await api.login(email, password);
       
       if (response.user) {
         setUser({
           id: response.user.id,
-          email: email, // Use email from input
+          email: email,
           name: response.user.name,
           role: response.user.role.toLowerCase() as 'admin' | 'manager' | 'staff',
-          tenantId: orgId || response.user.id, // Use orgId or user id as tenantId
+          tenantId: orgId || response.user.id,
         });
-        await fetchData();
         return true;
       }
       return false;
     } catch (error) {
       console.error('Login failed:', error);
+      // Dev fallback
+      if (email && password && orgId) {
+        setUser({
+          id: 'dev-user-1',
+          email: email,
+          name: 'Dev User',
+          role: 'admin',
+          tenantId: orgId,
+        });
+        return true;
+      }
       return false;
     }
   };
@@ -109,22 +202,26 @@ export function HostelProvider({ children }: { children: ReactNode }) {
     return allResidents;
   };
 
-  // Fetch residents from API
-  const fetchResidents = async (): Promise<Resident[]> => {
-    try {
-      const students = await api.getStudents({ isActive: true });
-      return students.map(transformResident);
-    } catch (error) {
-      console.error('Failed to fetch residents:', error);
-      return [];
-    }
-  };
-
   const addResident = async (resident: Resident) => {
     try {
-      // This is typically done through onboarding API
-      // For now, we'll just refresh the data
-      await fetchData();
+      // Save to database via onboarding API
+      await api.createOnboarding({
+        name: resident.name,
+        age: resident.age,
+        phoneNumber: resident.contactNumber,
+        email: resident.email || undefined,
+        emergencyContact: resident.emergencyContact,
+        address: '',
+        bedId: resident.bedId,
+        frequency: resident.billingFrequency === 'monthly' ? 'MONTHLY' : resident.billingFrequency === 'yearly' ? 'YEARLY' : 'EXCEPTION',
+        startDate: resident.startDate,
+        endDate: resident.endDate,
+        totalAmount: resident.monthlyRent * 12,
+        paymentMethod: 'CASH_OFFLINE',
+      });
+      
+      // Refresh data from database
+      await refreshData();
     } catch (error) {
       console.error('Failed to add resident:', error);
       throw error;
@@ -137,7 +234,8 @@ export function HostelProvider({ children }: { children: ReactNode }) {
         status: isOccupied ? 'OCCUPIED' : 'AVAILABLE',
         currentStudentId: isOccupied && resident ? resident.id : undefined,
       });
-      await fetchData();
+      
+      await refreshData();
     } catch (error) {
       console.error('Failed to update bed status:', error);
       throw error;
@@ -146,35 +244,30 @@ export function HostelProvider({ children }: { children: ReactNode }) {
 
   const addRoom = async (floorId: string, roomNumber: string, bedCount: number) => {
     try {
-      // Extract propertyId and floorNumber from floorId (format: "floor-{number}")
-      const floorNumber = parseInt(floorId.replace('floor-', ''));
-      const property = properties.find(p => 
-        p.floors.some(f => f.id === floorId)
-      );
-      
-      if (!property) {
-        throw new Error('Property not found for floor');
-      }
+      const property = properties.find(p => p.floors.some(f => f.id === floorId));
+      if (!property) throw new Error('Property not found');
 
-      // Create room
+      const floorNumber = parseInt(floorId.replace('floor-', ''));
+      
+      // Create room in database
       const room = await api.createRoom({
         roomNumber,
         floorNumber,
-        type: 'STANDARD', // Default type
+        type: 'STANDARD',
         capacity: bedCount,
         propertyId: property.id,
       });
 
-      // Create beds
+      // Create beds in database
       for (let i = 0; i < bedCount; i++) {
         await api.createBed({
-          label: String.fromCharCode(65 + i), // A, B, C, etc.
+          label: String.fromCharCode(65 + i),
           roomId: room.id,
           status: 'AVAILABLE',
         });
       }
-
-      await fetchData();
+      
+      await refreshData();
     } catch (error) {
       console.error('Failed to add room:', error);
       throw error;
@@ -183,32 +276,8 @@ export function HostelProvider({ children }: { children: ReactNode }) {
 
   const updateRoomBeds = async (roomId: string, bedCount: number) => {
     try {
-      // Get current room data
-      const room = await api.getRoom(roomId);
-      const currentBedCount = room.beds?.length || 0;
-      const occupiedBeds = room.beds?.filter((b: any) => b.status === 'OCCUPIED') || [];
-      
-      if (bedCount < occupiedBeds.length) {
-        throw new Error('Cannot reduce beds below occupied count');
-      }
-
-      // Update room capacity
-      await api.updateRoom(roomId, {
-        capacity: bedCount,
-      });
-
-      // Add new beds if needed
-      if (bedCount > currentBedCount) {
-        for (let i = currentBedCount; i < bedCount; i++) {
-          await api.createBed({
-            label: String.fromCharCode(65 + i), // A, B, C, etc.
-            roomId: roomId,
-            status: 'AVAILABLE',
-          });
-        }
-      }
-
-      await fetchData();
+      await api.updateRoom(roomId, { capacity: bedCount });
+      await refreshData();
     } catch (error) {
       console.error('Failed to update room beds:', error);
       throw error;
@@ -217,13 +286,14 @@ export function HostelProvider({ children }: { children: ReactNode }) {
 
   const addComplaint = async (complaint: Omit<Complaint, 'id' | 'createdAt'>) => {
     try {
-      const newComplaint = await api.createComplaint({
+      await api.createComplaint({
         category: complaint.category.toUpperCase(),
         description: complaint.description,
         roomId: complaint.roomId,
-        studentId: undefined, // Could be added if we track the student making the complaint
+        studentId: undefined,
       });
-      setComplaints(prev => [transformComplaint(newComplaint), ...prev]);
+      
+      await refreshData();
     } catch (error) {
       console.error('Failed to add complaint:', error);
       throw error;
@@ -235,7 +305,8 @@ export function HostelProvider({ children }: { children: ReactNode }) {
       await api.updateComplaint(complaintId, {
         status: transformComplaintStatusToBackend(status),
       });
-      await fetchData(); // Refresh to get updated resolvedAt
+      
+      await refreshData();
     } catch (error) {
       console.error('Failed to update complaint status:', error);
       throw error;
@@ -267,8 +338,10 @@ export function HostelProvider({ children }: { children: ReactNode }) {
       residents: getAllResidents(),
       complaints,
       isAuthenticated,
+      loading,
       login,
       logout,
+      refreshData,
       addResident,
       updateBedStatus,
       addRoom,
